@@ -1,0 +1,88 @@
+var express = require("express");
+var router = express.Router();
+let userModel = require("../schemas/users");
+let { CreateAnUserValidator, validatedResult, ModifyAnUser } = require('../utils/validateHandler')
+let userController = require('../controllers/users')
+let {CheckLogin} = require('../utils/authHandler')
+
+router.get("/", CheckLogin, async function (req, res, next) {
+  let users = await userController.GetAllUser()
+  res.send(users);
+});
+
+router.get("/:id", async function (req, res, next) {
+  try {
+    let result = await userModel
+      .find({ _id: req.params.id, isDeleted: false })
+    if (result.length > 0) {
+      res.send(result);
+    }
+    else {
+      res.status(404).send({ message: "id not found" });
+    }
+  } catch (error) {
+    res.status(404).send({ message: "id not found" });
+  }
+});
+
+router.post("/", CreateAnUserValidator, validatedResult, async function (req, res, next) {
+  try {
+    let newItem = await userController.CreateAnUser(
+      req.body.username, req.body.password, req.body.email, req.body.role,
+      req.body.fullName, req.body.avatarUrl, req.body.status, req.body.loginCount
+    )
+    // populate cho đẹp
+    let saved = await userModel
+      .findById(newItem._id)
+    res.send(saved);
+  } catch (err) {
+    res.status(400).send({ message: err.message });
+  }
+});
+
+router.put("/:id", ModifyAnUser, validatedResult, async function (req, res, next) {
+  try {
+    let id = req.params.id;
+    let updatedItem = await userModel.findByIdAndUpdate(id, req.body, { new: true });
+
+    if (!updatedItem) return res.status(404).send({ message: "id not found" });
+
+    let populated = await userModel
+      .findById(updatedItem._id)
+    res.send(populated);
+  } catch (err) {
+    res.status(400).send({ message: err.message });
+  }
+});
+
+router.delete("/:id", async function (req, res, next) {
+  try {
+    let id = req.params.id;
+    let updatedItem = await userModel.findByIdAndUpdate(
+      id,
+      { isDeleted: true },
+      { new: true }
+    );
+    if (!updatedItem) {
+      return res.status(404).send({ message: "id not found" });
+    }
+    res.send(updatedItem);
+  } catch (err) {
+    res.status(400).send({ message: err.message });
+  }
+});
+// Lấy thông tin cá nhân (yêu cầu đăng nhập)
+router.get("/me", CheckLogin, async function(req, res, next) {
+  try {
+    // req.user đã được gắn từ middleware
+    const user = req.user.toObject();
+    delete user.password; // ẩn mật khẩu
+    res.send(user);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Đổi mật khẩu (yêu cầu đăng nhập)
+router.post("/change-password", CheckLogin, userController.changePassword);
+module.exports = router;
